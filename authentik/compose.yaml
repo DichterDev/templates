@@ -1,0 +1,103 @@
+networks:
+  auth-network:
+    name: auth-network
+  socket-network:
+    name: socket-network
+
+volumes:
+  auth-pgdata:
+    name: auth-pgdata
+
+services:
+  socket-proxy:
+    image: lscr.io/linuxserver/socket-proxy:latest
+    container_name: socket-proxy
+    restart: unless-stopped
+    read_only: true
+    environment:
+      - CONTAINERS=1
+      - IMAGES=1
+      - NETWORKS=1
+      - POST=1
+      - DELETE=1
+      - VOLUMES=1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    tmpfs:
+      - /run
+    networks:
+      - socket-network
+
+  auth-db:
+    image: postgres:16-alpine
+    container_name: auth-db
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -d $${AUTHENTIK_PG_DB} -U $${AUTHENTIK_PG_USER}",
+        ]
+      start_period: 20s
+      interval: 30s
+      retries: 5
+      timeout: 5s
+    environment:
+      POSTGRES_USER: ${AUTHENTIK_PG_USER}
+      POSTGRES_DB: ${AUTHENTIK_PG_DB}
+      POSTGRES_PASSWORD: ${AUTHENTIK_PG_PASSWORD}
+    volumes:
+      - auth-pgdata:/var/lib/postgresql/data
+    networks:
+      - auth-network
+
+  auth-server:
+    image: ghcr.io/goauthentik/server:${AUTHENTIK_VERSION_TAG}
+    container_name: auth-server
+    command: server
+    shm_size: 512mb
+    restart: unless-stopped
+    ports:
+      - ${AUTHENTIK_PORT_HTTP}:9000
+      - ${AUTHENTIK_PORT_HTTPS}:9443
+    environment:
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY}
+      AUTHENTIK_POSTGRESQL__HOST: auth-db
+      AUTHENTIK_POSTGRESQL__NAME: ${AUTHENTIK_PG_DB}
+      AUTHENTIK_POSTGRESQL__USER: ${AUTHENTIK_PG_USER}
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_PG_PASSWORD}
+    volumes:
+      - ./data:/data
+      - ./templates:/templates
+    depends_on:
+      auth-db:
+        condition: service_healthy
+    networks:
+      - auth-network
+
+  auth-worker:
+    image: ghcr.io/goauthentik/server:${AUTHENTIK_VERSION_TAG}
+    container_name: auth-worker
+    command: worker
+    user: root
+    shm_size: 512mb
+    restart: unless-stopped
+    environment:
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY}
+      AUTHENTIK_POSTGRESQL__HOST: auth-db
+      AUTHENTIK_POSTGRESQL__NAME: ${AUTHENTIK_PG_DB}
+      AUTHENTIK_POSTGRESQL__USER: ${AUTHENTIK_PG_USER}
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_PG_PASSWORD}
+      DOCKER_HOST: http://socket-proxy:2375
+    volumes:
+      - ./data:/data
+      - ./certs:/certs
+      - ./templates:/templates
+    depends_on:
+      auth-db:
+        condition: service_healthy
+      socket-proxy:
+        condition: service_started
+    networks:
+      - auth-network
+      - socket-network
