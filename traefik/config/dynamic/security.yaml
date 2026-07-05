@@ -1,0 +1,30 @@
+tls:
+  options:
+    default:
+      minVersion: VersionTLS12
+      cipherSuites:
+        - TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+        - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+        - TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256
+        - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+      curvePreferences:
+        - X25519
+        - CurveP256
+        - CurveP384
+      sniStrict: true
+
+http:
+  middlewares:
+    secHeaders:
+      headers:
+        contentTypeNosniff: true
+        frameDeny: true
+        sslRedirect: true
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        stsPreload: true
+        customFrameOptionsValue: "SAMEORIGIN"
+        customResponseHeaders:
+          server: ""
+          X-Powered-By: ""
+          X-Forwarded-Proto: "https"

@@ -1,0 +1,61 @@
+networks:
+  proxy-net:
+    name: proxy-net
+    external: true
+  socket-net:
+    name: socket-net
+    driver: bridge
+    internal: true
+
+services:
+  traefik:
+    image: traefik:v3.7
+    container_name: traefik
+    restart: unless-stopped
+    user: 2000:2000
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - proxy-net
+      - socket-net
+    ports:
+      - ${TRAEFIK_PORT_HTTP}:10080
+      - ${TRAEFIK_PORT_HTTPS}:10443
+    volumes:
+      - ./config/traefik.yaml:/etc/traefik/traefik.yaml:ro
+      - ./config/dynamic:/etc/traefik/dynamic:ro
+      - ./config/acme/acme.json:/etc/traefik/acme.json
+    environment:
+      - TRAEFIK_CERTIFICATERESOLVERS_letsencrypt_ACME_EMAIL=${TRAEFIK_LETSENCRYPT_EMAIL}
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.dashboard.rule=Host(`${TRAEFIK_DOMAIN}`)
+      - traefik.http.routers.dashboard.service=api@internal
+      - traefik.http.routers.dashboard.entrypoints=websecure
+      - traefik.http.routers.dashboard.tls.certresolver=letsencrypt
+    depends_on:
+      - socket-proxy
+
+  socket-proxy:
+    image: wollomatic/socket-proxy:1
+    command:
+      - "-loglevel=info"
+      - "-allowfrom=traefik"
+      - "-listenip=0.0.0.0"
+      - '-allowGET=/v1\..{1,2}/(version|containers/.*|events.*)'
+      - "-allowHEAD=/_ping"
+      - "-shutdowngracetime=5"
+      - "-watchdoginterval=600"
+      - "-stoponwatchdog"
+    restart: unless-stopped
+    read_only: true
+    mem_limit: 64M
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges
+    user: 65534:${DOCKER_GID}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - socket-net
