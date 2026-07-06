@@ -3,7 +3,6 @@ networks:
     name: proxy-net
     external: true
   socket-net:
-    name: socket-net
     driver: bridge
     internal: true
 
@@ -38,6 +37,7 @@ services:
 
   socket-proxy:
     image: wollomatic/socket-proxy:1
+    container_name: traefik-socket-proxy
     command:
       - "-loglevel=info"
       - "-allowfrom=traefik"

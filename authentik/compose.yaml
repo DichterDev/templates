@@ -1,8 +1,10 @@
 networks:
-  auth-network:
-    name: auth-network
-  socket-network:
-    name: socket-network
+  auth-net:
+    name: auth-net
+    external: true
+  socket-net:
+    driver: bridge
+    internal: true
 
 volumes:
   auth-pgdata:
@@ -10,27 +12,34 @@ volumes:
 
 services:
   socket-proxy:
-    image: lscr.io/linuxserver/socket-proxy:latest
-    container_name: socket-proxy
+    image: wollomatic/socket-proxy:1
+    container_name: authentik-socket-proxy
+    command:
+      - "-loglevel=info"
+      - "-allowfrom=authentik-worker"
+      - "-listenip=0.0.0.0"
+      - '-allowGET=^(/v[0-9\.]+)?/(version|info|containers/.*|events.*)$'
+      - '-allowPOST=^(/v[0-9\.]+)?/(images/create|containers/create|containers/.*/(start|stop|kill))$'
+      - '-allowDELETE=^(/v[0-9\.]+)?/containers/.*$'
+      - "-shutdowngracetime=5"
+      - "-watchdoginterval=600"
+      - "-stoponwatchdog"
     restart: unless-stopped
     read_only: true
-    environment:
-      - CONTAINERS=1
-      - IMAGES=1
-      - NETWORKS=1
-      - POST=1
-      - DELETE=1
-      - VOLUMES=1
+    mem_limit: 64M
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges
+    user: 65534:${DOCKER_GID}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-    tmpfs:
-      - /run
     networks:
-      - socket-network
+      - socket-net
 
-  auth-db:
+  db:
     image: postgres:16-alpine
-    container_name: auth-db
+    container_name: authentik-db
     restart: unless-stopped
     healthcheck:
       test:
@@ -49,11 +58,11 @@ services:
     volumes:
       - auth-pgdata:/var/lib/postgresql/data
     networks:
-      - auth-network
+      - auth-net
 
-  auth-server:
+  server:
     image: ghcr.io/goauthentik/server:${AUTHENTIK_VERSION_TAG}
-    container_name: auth-server
+    container_name: authentik-server
     command: server
     shm_size: 512mb
     restart: unless-stopped
@@ -62,7 +71,7 @@ services:
       - ${AUTHENTIK_PORT_HTTPS}:9443
     environment:
       AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY}
-      AUTHENTIK_POSTGRESQL__HOST: auth-db
+      AUTHENTIK_POSTGRESQL__HOST: db
       AUTHENTIK_POSTGRESQL__NAME: ${AUTHENTIK_PG_DB}
       AUTHENTIK_POSTGRESQL__USER: ${AUTHENTIK_PG_USER}
       AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_PG_PASSWORD}
@@ -70,21 +79,21 @@ services:
       - ./data:/data
       - ./templates:/templates
     depends_on:
-      auth-db:
+      db:
         condition: service_healthy
     networks:
-      - auth-network
+      - auth-net
 
-  auth-worker:
+  worker:
     image: ghcr.io/goauthentik/server:${AUTHENTIK_VERSION_TAG}
-    container_name: auth-worker
+    container_name: authentik-worker
     command: worker
     user: root
     shm_size: 512mb
     restart: unless-stopped
     environment:
       AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY}
-      AUTHENTIK_POSTGRESQL__HOST: auth-db
+      AUTHENTIK_POSTGRESQL__HOST: db
       AUTHENTIK_POSTGRESQL__NAME: ${AUTHENTIK_PG_DB}
       AUTHENTIK_POSTGRESQL__USER: ${AUTHENTIK_PG_USER}
       AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_PG_PASSWORD}
@@ -94,10 +103,10 @@ services:
       - ./certs:/certs
       - ./templates:/templates
     depends_on:
-      auth-db:
+      db:
         condition: service_healthy
       socket-proxy:
         condition: service_started
     networks:
-      - auth-network
-      - socket-network
+      - auth-net
+      - socket-net

@@ -28,7 +28,17 @@ Copy and replace `AUTHENTIK_SECRET_KEY` in `.env`.
 
 Also fill in the rest of the `.env` variables with your chosen values.
 
-### TRAEFIK
+### Socket
+
+For the `DOCKER_GID` variable you need to execute following command:
+
+```sh
+getent group docker | cut -d: -f3
+```
+
+Copy and paste this as the variable value.
+
+### Traefik
 
 Make sure that your `auth-server` has access to the same docker network as your traefik instance. It is recommended to create a separate `proxy-network` for this purpose
 
@@ -40,7 +50,7 @@ labels:
     traefik.http.routers.authentik.rule: Host(`${AUTHENTIK_DOMAIN}`)
     traefik.http.routers.authentik.entrypoints: websecure
     traefik.http.routers.authentik.tls: true
-    traefik.http.routers.authentik.tls.certresolver: ${TRAEFIK_CERT_RESOLVER}
+    traefik.http.routers.authentik.tls.certresolver: <your-cert-resolver>
     traefik.http.services.authentik.loadbalancer.server.port: 9000
 ```
 
