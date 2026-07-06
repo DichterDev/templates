@@ -1,0 +1,22 @@
+log:
+  level: WARN
+  format: json
+
+providers:
+  docker:
+    exposedByDefault: false
+    endpoint: "tcp://socket-proxy:2375"
+    network: proxy-net
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true
+api:
+  dashboard: true
+  insecure: false
+
+entryPoints:
+  web:
+    address: ":10080"
+
+global:
+  sendAnonymousUsage: false

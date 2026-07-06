@@ -22,18 +22,6 @@ getent group docker | cut -d: -f3
 
 Copy and paste this as the variable value.
 
-### ACME
-
-For the tls challenge you need to fill in your Let's Encrypt Email in the `.env` file (`TRAEFIK_LETSENCRYPT_EMAIL`).
-
-Traefik itself is running as `2000:2000` on the host (no root), so the `config/acme/acme.json` file needs to be configured so that traefik may access it and the permissions need to be set to `600` for security reasons.
-
-```sh
-touch config/acme/acme.json
-chown 2000:2000 config/acme/acme.json
-chmod 600 config/acme/acme.json
-```
-
 ## Launch
 
 For tls to work correctly you need to deploy this on a valid domain name, if you don't have one and want to use this as a local setup, I would recommend commenting out the tls part in the `config/dynamic/security.yaml` file.

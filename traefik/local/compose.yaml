@@ -1,0 +1,56 @@
+networks:
+  proxy-net:
+    name: proxy-net
+    external: true
+  socket-net:
+    name: socket-net
+    driver: bridge
+    internal: true
+
+services:
+  traefik:
+    image: traefik:v3.7
+    container_name: traefik
+    restart: unless-stopped
+    user: 2000:2000
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - proxy-net
+      - socket-net
+    ports:
+      - ${TRAEFIK_PORT_HTTP}:10080
+    volumes:
+      - ./config/traefik.yaml:/etc/traefik/traefik.yaml:ro
+      - ./config/dynamic:/etc/traefik/dynamic:ro
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.dashboard.rule=Host(`${TRAEFIK_DOMAIN}`)
+      - traefik.http.routers.dashboard.entrypoints=web
+      - traefik.http.routers.dashboard.service=api@internal
+    depends_on:
+      - socket-proxy
+
+  socket-proxy:
+    image: wollomatic/socket-proxy:1
+    command:
+      - "-loglevel=info"
+      - "-allowfrom=traefik"
+      - "-listenip=0.0.0.0"
+      - '-allowGET=/v1\..{1,2}/(version|containers/.*|events.*)'
+      - "-allowHEAD=/_ping"
+      - "-shutdowngracetime=5"
+      - "-watchdoginterval=600"
+      - "-stoponwatchdog"
+    restart: unless-stopped
+    read_only: true
+    mem_limit: 64M
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges
+    user: 65534:${DOCKER_GID}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - socket-net
